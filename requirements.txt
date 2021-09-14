@@ -1,0 +1,9 @@
+torch
+torchvision
+torchsummary
+tensorboard
+matplotlib
+numpy
+pandas
+pillow
+tdqm
