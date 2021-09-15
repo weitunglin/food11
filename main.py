@@ -141,6 +141,13 @@ def main():
     print("----- device -----")
     print(device)
 
+    # imbalance weights
+    train_distributions = np.unique(np.array(image_datasets["train"].targets), return_counts=True)[1]
+    print("----- classes count -----")
+    print(train_distributions)
+    train_distributions = torch.Tensor(dataset_sizes["train"] / (train_distributions * 11)).to(device)
+    print("----- classes weight -----")
+    print(train_distributions)
 
     model_conv = torchvision.models.resnet50(pretrained=True)
 
@@ -153,7 +160,7 @@ def main():
 
     model_conv = model_conv.to(device)
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(weight=train_distributions)
     optimizer = optim.AdamW(model_conv.fc.parameters(), lr=args.lr)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma, verbose=True)
 
