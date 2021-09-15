@@ -67,8 +67,8 @@ def train_model(model, dataloaders, dataset_sizes, criterion, optimizer, schedul
             epoch_acc = running_corrects.double() / dataset_sizes[phase]
 
             if args.save_tb:
-                tb.add_scalar("epoch loss", epoch_loss, epoch)
-                tb.add_scalar("epoch acc", epoch_acc, epoch)
+                tb.add_scalar(f"{phase} loss", epoch_loss, epoch)
+                tb.add_scalar(f"{phase} acc", epoch_acc, epoch)
 
             print(f"{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}")
 
@@ -93,7 +93,9 @@ def main():
     parser.add_argument("--input", type=str, required=True, help="directory to input")
     parser.add_argument("--epochs", type=int, required=True, help="epochs for training")
     parser.add_argument("--lr", type=float, required=True, help="learning rate for training")
+    parser.add_argument("--gamma", type=float, required=True, help="gamma for learning rate")
     parser.add_argument("--batch-size", type=int, default=32, help="batch size for the dataset")
+    parser.add_argument("--fine-tune", type=utils.str2bool, default=False, help="fine tune or only train last layer")
     parser.add_argument("--save-tb", type=utils.str2bool, default=True, help="save this run into tensorboard or not")
     parser.add_argument("--run-name", type=str, default=datetime.now().strftime("%Y%m%d_%H_%M_%S"), help="run name for tensor board")
     parser.add_argument("--random-seed", type=int, default=42, help="designated random seed to enabel reproducity of the training process")
@@ -107,7 +109,7 @@ def main():
 
     data_transforms = {
         "train": transforms.Compose([
-            transforms.RandomResizedCrop((224, 224)),
+            transforms.Resize((224, 224)),
             transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(10),
             transforms.ToTensor(),
@@ -140,9 +142,11 @@ def main():
     print(device)
 
 
-    model_conv = torchvision.models.resnet18(pretrained=True)
-    for param in model_conv.parameters():
-        param.requires_grad = False
+    model_conv = torchvision.models.resnet50(pretrained=True)
+
+    if not args.fine_tune:
+        for param in model_conv.parameters():
+            param.requires_grad = False
     
     num_features = model_conv.fc.in_features
     model_conv.fc = nn.Linear(num_features, 11)
@@ -150,8 +154,8 @@ def main():
     model_conv = model_conv.to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model_conv.fc.parameters(), lr=args.lr)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
+    optimizer = optim.AdamW(model_conv.fc.parameters(), lr=args.lr)
+    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=args.gamma, verbose=True)
 
     if args.save_tb:
         images = iter(dataloaders["train"]).next()[0].to(device)
@@ -178,6 +182,9 @@ def main():
         for j, value in row.iteritems():
             ax.text(x=j, y=i, s=value, va='center', ha='center', size='xx-large')
 
+    test_acc = torch.sum(test_ground_truth.cpu() == test_predictions.cpu()).double() / dataset_sizes["test"]
+    print(f"test Acc: {test_acc:.4f}")
+    
     plt.xlabel('Predictions', fontsize=18)
     plt.ylabel('Actuals', fontsize=18)
     plt.title('Confusion Matrix', fontsize=18)
